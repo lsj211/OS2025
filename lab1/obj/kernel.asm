@@ -45,7 +45,7 @@ int kern_init(void) {
     8020002e:	00000517          	auipc	a0,0x0
     80200032:	49a50513          	addi	a0,a0,1178 # 802004c8 <memset+0x38>
     80200036:	01e000ef          	jal	80200054 <cprintf>
-   while (1)
+    while (1)
     8020003a:	a001                	j	8020003a <kern_init+0x30>
 
 000000008020003c <cputch>:
