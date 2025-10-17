@@ -74,6 +74,9 @@ best_fit_init_memmap(struct Page *base, size_t n) {
         assert(PageReserved(p));
         /*LAB2 EXERCISE 2: YOUR CODE*/ 
         // 清空当前页框的标志和属性信息，并将页框的引用计数设置为0
+        p->flags = 0;       // 清除所有标志（如PG_reserved）
+        p->property = 0;    // 非块首页，property设为0
+        set_page_ref(p, 0); // 引用计数初始化为0
 
 
     }
@@ -91,10 +94,70 @@ best_fit_init_memmap(struct Page *base, size_t n) {
             // 1、当base < page时，找到第一个大于base的页，将base插入到它前面，并退出循环
             // 2、当list_next(le) == &free_list时，若已经到达链表结尾，将base插入到链表尾部
 
+            struct Page* page = le2page(le, page_link);
+            /* 按地址升序插入：找到第一个地址大于base的页，插入其前面 */
+            if (base < page) {
+                list_add_before(le, &(base->page_link));
+                break;
+            }
+            /* 若遍历到链表尾部，直接插入尾部 */
+            else if (list_next(le) == &free_list) {
+                list_add(le, &(base->page_link));
+            }
+
 
         }
     }
 }
+
+
+
+
+
+
+// static void
+// best_fit_init_memmap(struct Page *base, size_t n) {
+//     assert(n > 0);
+//     struct Page *p = base;
+//     for (; p != base + n; p ++) {
+//         assert(PageReserved(p));
+//         /* 清空页框标志、属性，设置引用计数为0 */
+//         p->flags = 0;       // 清除所有标志（如PG_reserved）
+//         p->property = 0;    // 非块首页，property设为0
+//         set_page_ref(p, 0); // 引用计数初始化为0
+//     }
+//     base->property = n;
+//     SetPageProperty(base);
+//     nr_free += n;
+//     if (list_empty(&free_list)) {
+//         list_add(&free_list, &(base->page_link));
+//     } else {
+//         list_entry_t* le = &free_list;
+//         while ((le = list_next(le)) != &free_list) {
+//             struct Page* page = le2page(le, page_link);
+//             /* 按地址升序插入：找到第一个地址大于base的页，插入其前面 */
+//             if (base < page) {
+//                 list_add_before(le, &(base->page_link));
+//                 break;
+//             }
+//             /* 若遍历到链表尾部，直接插入尾部 */
+//             else if (list_next(le) == &free_list) {
+//                 list_add(le, &(base->page_link));
+//             }
+//         }
+//     }
+// }
+
+
+
+
+
+
+
+
+
+
+
 
 static struct Page *
 best_fit_alloc_pages(size_t n) {
@@ -112,26 +175,77 @@ best_fit_alloc_pages(size_t n) {
 
     while ((le = list_next(le)) != &free_list) {
         struct Page *p = le2page(le, page_link);
-        if (p->property >= n) {
-            page = p;
-            break;
+        // 若当前块满足需求，且比已记录的最小块更小
+        if (p->property >= n && p->property < min_size) {
+            min_size = p->property; // 更新最小块大小
+            page = p;              // 记录当前最优块
         }
     }
 
+    /* 若找到最优块，处理分配逻辑（与First Fit一致） */
     if (page != NULL) {
         list_entry_t* prev = list_prev(&(page->page_link));
-        list_del(&(page->page_link));
+        list_del(&(page->page_link)); // 从空闲链表中移除
+        // 若块大小大于需求，拆分剩余部分并重新插入链表
         if (page->property > n) {
-            struct Page *p = page + n;
+            struct Page *p = page + n;  // 剩余块的首页
             p->property = page->property - n;
-            SetPageProperty(p);
-            list_add(prev, &(p->page_link));
+            SetPageProperty(p);         // 标记为空闲块首页
+            list_add(prev, &(p->page_link)); // 插入到原块的前一个位置
         }
-        nr_free -= n;
-        ClearPageProperty(page);
+        nr_free -= n;                  // 总空闲页减少
+        ClearPageProperty(page);       // 清除当前块的空闲标记
     }
     return page;
 }
+
+
+
+
+
+
+// static struct Page *
+// best_fit_alloc_pages(size_t n) {
+//     assert(n > 0);
+//     if (n > nr_free) {
+//         return NULL;
+//     }
+//     struct Page *page = NULL;       // 最终选中的页块
+//     list_entry_t *le = &free_list;
+//     size_t min_size = nr_free + 1;  // 初始化最小块大小（大于总空闲页，确保能被更新）
+
+//     /* 遍历所有空闲块，寻找最小且满足n的块 */
+//     while ((le = list_next(le)) != &free_list) {
+//         struct Page *p = le2page(le, page_link);
+//         // 若当前块满足需求，且比已记录的最小块更小
+//         if (p->property >= n && p->property < min_size) {
+//             min_size = p->property; // 更新最小块大小
+//             page = p;              // 记录当前最优块
+//         }
+//     }
+
+//     /* 若找到最优块，处理分配逻辑（与First Fit一致） */
+//     if (page != NULL) {
+//         list_entry_t* prev = list_prev(&(page->page_link));
+//         list_del(&(page->page_link)); // 从空闲链表中移除
+//         // 若块大小大于需求，拆分剩余部分并重新插入链表
+//         if (page->property > n) {
+//             struct Page *p = page + n;  // 剩余块的首页
+//             p->property = page->property - n;
+//             SetPageProperty(p);         // 标记为空闲块首页
+//             list_add(prev, &(p->page_link)); // 插入到原块的前一个位置
+//         }
+//         nr_free -= n;                  // 总空闲页减少
+//         ClearPageProperty(page);       // 清除当前块的空闲标记
+//     }
+//     return page;
+// }
+
+
+
+
+
+
 
 static void
 best_fit_free_pages(struct Page *base, size_t n) {
@@ -145,6 +259,9 @@ best_fit_free_pages(struct Page *base, size_t n) {
     /*LAB2 EXERCISE 2: YOUR CODE*/ 
     // 编写代码
     // 具体来说就是设置当前页块的属性为释放的页块数、并将当前页块标记为已分配状态、最后增加nr_free的值
+    base->property = n;               // 块首页记录块大小
+    SetPageProperty(base);            // 标记为空闲块首页
+    nr_free += n;                     // 总空闲页增加
 
 
     if (list_empty(&free_list)) {
@@ -173,6 +290,13 @@ best_fit_free_pages(struct Page *base, size_t n) {
         // 4、从链表中删除当前页块
         // 5、将指针指向前一个空闲页块，以便继续检查合并后的连续空闲页块
 
+        if (p + p->property == base) {
+            p->property += base->property; // 合并：前块大小 += 当前块大小
+            ClearPageProperty(base);       // 清除当前块的空闲标记（不再是块首）
+            list_del(&(base->page_link));  // 从链表中删除当前块
+            base = p;                      // 更新base为合并后的块首页，便于后续合并后块
+        }
+
     }
 
     le = list_next(&(base->page_link));
@@ -185,6 +309,87 @@ best_fit_free_pages(struct Page *base, size_t n) {
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// static void
+// best_fit_free_pages(struct Page *base, size_t n) {
+//     assert(n > 0);
+//     struct Page *p = base;
+//     for (; p != base + n; p ++) {
+//         assert(!PageReserved(p) && !PageProperty(p));
+//         p->flags = 0;
+//         set_page_ref(p, 0);
+//     }
+//     /* 初始化释放块的属性 */
+//     base->property = n;               // 块首页记录块大小
+//     SetPageProperty(base);            // 标记为空闲块首页
+//     nr_free += n;                     // 总空闲页增加
+
+//     /* 按地址顺序插入空闲链表（与First Fit一致） */
+//     if (list_empty(&free_list)) {
+//         list_add(&free_list, &(base->page_link));
+//     } else {
+//         list_entry_t* le = &free_list;
+//         while ((le = list_next(le)) != &free_list) {
+//             struct Page* page = le2page(le, page_link);
+//             if (base < page) {
+//                 list_add_before(le, &(base->page_link));
+//                 break;
+//             } else if (list_next(le) == &free_list) {
+//                 list_add(le, &(base->page_link));
+//             }
+//         }
+//     }
+
+//     /* 合并前一个相邻的空闲块 */
+//     list_entry_t* le = list_prev(&(base->page_link));
+//     if (le != &free_list) {
+//         p = le2page(le, page_link);
+//         // 检查前块的末尾是否与当前块的开头连续（前块首页+前块大小 == 当前块首页）
+//         if (p + p->property == base) {
+//             p->property += base->property; // 合并：前块大小 += 当前块大小
+//             ClearPageProperty(base);       // 清除当前块的空闲标记（不再是块首）
+//             list_del(&(base->page_link));  // 从链表中删除当前块
+//             base = p;                      // 更新base为合并后的块首页，便于后续合并后块
+//         }
+//     }
+
+//     /* 合并后一个相邻的空闲块（与First Fit一致） */
+//     le = list_next(&(base->page_link));
+//     if (le != &free_list) {
+//         p = le2page(le, page_link);
+//         if (base + base->property == p) {
+//             base->property += p->property;
+//             ClearPageProperty(p);
+//             list_del(&(p->page_link));
+//         }
+//     }
+// }
+
+
+
+
+
+
+
+
+
+
+
+
 
 static size_t
 best_fit_nr_free_pages(void) {
