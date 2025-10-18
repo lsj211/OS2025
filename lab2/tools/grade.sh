@@ -369,6 +369,14 @@ quick_check 'check_best_fit'                                       \
     'satp virtual address: 0xffffffffc0204000'                       \
     'satp physical address: 0x0000000080204000'                      \
 
+
+
+
+#///////////////////////////////////////////////slub测试//////////////////////////////////
+# pts=10
+# quick_check 'check_slub' \
+#     'check_slub() succeeded!'
+
 # pts=5
 # quick_check 'check ticks'                                       \
 #    '++ setup timer interrupts'                                 \
