@@ -68,8 +68,7 @@ extern const struct pmm_manager best_fit_pmm_manager;
 #define page_free(page) best_fit_pmm_manager.free_pages(page, 1)
 
 // 全局SLUB管理器实例
-const struct slub_pmm_manager slub_pmm_manager = {
-    .base = {
+const struct pmm_manager slub_pmm_manager = {
         .name = "slub_pmm_manager",
         .init = slub_init,
         .init_memmap = slub_init_memmap,
@@ -77,9 +76,6 @@ const struct slub_pmm_manager slub_pmm_manager = {
         .free_pages = slub_free_pages,
         .nr_free_pages = slub_nr_free_pages,
         .check = slub_check,
-    },
-    .alloc_obj = slub_alloc,
-    .free_obj = slub_free
 };
 
 // 辅助宏：从链表节点获取slab结构体指针

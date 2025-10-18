@@ -344,8 +344,6 @@ static void advanced_buddy_check(void) {
     free_pages(x2, 2);
     free_pages(x1, 1);
     free_pages(x3, 1);
-    cprintf("longest = %u\n", buddy.longest[0]);
-    cprintf("size    = %u\n", buddy.size);
     assert(buddy.longest[0] == buddy.size);
     cprintf("测试7通过: 碎片化后完全合并恢复.\n");
 
