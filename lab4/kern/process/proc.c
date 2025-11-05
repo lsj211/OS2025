@@ -105,6 +105,36 @@ alloc_proc(void)
          *       char name[PROC_NAME_LEN + 1];               // Process name
          */
         
+         // 初始化进程状态为未初始化
+        proc->state = PROC_UNINIT;
+        
+        // 初始化进程ID为无效值
+        proc->pid = -1;
+        
+        // 初始化运行次数为0
+        proc->runs = 0;
+        proc->kstack = 0;
+        proc->need_resched = 0;
+        proc->parent = NULL;
+        
+        // 初始化内存管理结构为NULL
+        proc->mm = NULL;
+        
+        // 初始化上下文结构（全部置0）
+        memset(&(proc->context), 0, sizeof(struct context));
+        
+        // 初始化陷阱帧指针为NULL
+        proc->tf = NULL;
+        
+        // 初始化页目录表基址为0
+        proc->pgdir = NULL;
+        
+        // 初始化进程标志为0
+        proc->flags = 0;
+        
+        // 初始化进程名称为空字符串
+        memset(proc->name, 0, PROC_NAME_LEN + 1);
+        
     }
     return proc;
 }
