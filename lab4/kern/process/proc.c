@@ -205,16 +205,29 @@ void proc_run(struct proc_struct *proc)
 {
     if (proc != current)
     {
-        // LAB4:EXERCISE3 YOUR CODE
-        /*
-         * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
-         * MACROs or Functions:
-         *   local_intr_save():        Disable interrupts
-         *   local_intr_restore():     Enable Interrupts
-         *   lsatp():                   Modify the value of satp register
-         *   switch_to():              Context switching between two processes
-         */
 
+        // follow steps:
+        // 1. disable local interrupts and save flags
+        // 2. switch current pointer to new proc
+        // 3. load new page table via lsatp
+        // 4. perform context switch
+        // 5. restore interrupts
+        bool intr_flag;
+        struct proc_struct *prev = current;
+
+        local_intr_save(intr_flag);
+
+        /* switch current proc */
+        current = proc;
+
+        /* load new page table (satp) so that after switch the new address space is active */
+        lsatp((unsigned int)proc->pgdir);
+
+        /* perform architecture-specific context switch: will return when 'prev' is rescheduled */
+        switch_to(&prev->context, &proc->context);
+
+        /* restore interrupt state */
+        local_intr_restore(intr_flag);
     }
 }
 
@@ -352,6 +365,44 @@ int do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf)
     //    5. insert proc_struct into hash_list && proc_list
     //    6. call wakeup_proc to make the new child process RUNNABLE
     //    7. set ret vaule using child proc's pid
+
+        // 1. 分配进程控制块
+    if ((proc = alloc_proc()) == NULL) {
+        goto fork_out;
+    }
+
+    // 2. 分配内核栈
+    if (setup_kstack(proc) != 0) {
+        goto bad_fork_cleanup_proc;
+    }
+
+    // 3. 复制/共享内存管理信息（内核线程不需要实际操作，copy_mm会直接返回0）
+    if (copy_mm(clone_flags, proc) != 0) {
+        goto bad_fork_cleanup_kstack;
+    }
+
+    // 4. 复制上下文（trapframe、context）
+    copy_thread(proc, stack, tf);
+
+    // 5. 分配唯一pid
+    proc->pid = get_pid();
+
+    // 6. 设置父进程
+    proc->parent = current;
+
+    // 7. 插入进程哈希表和进程链表
+    hash_proc(proc);
+    list_add(&proc_list, &(proc->list_link));
+
+    // 8. 增加进程数
+    nr_process++;
+
+    // 9. 唤醒新进程
+    extern void wakeup_proc(struct proc_struct *proc);
+    wakeup_proc(proc);
+
+    // 10. 返回新进程pid
+    ret = proc->pid;
     
 fork_out:
     return ret;
