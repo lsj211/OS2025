@@ -423,6 +423,27 @@ int copy_range(pde_t *to, pde_t *from, uintptr_t start, uintptr_t end,
              * (4) build the map of phy addr of  nage with the linear addr start
              */
 
+            // 源页的内核虚拟地址（父进程页内容的位置）
+            void *src_kvaddr = page2kva(page);
+            
+            // 目标页的内核虚拟地址（子进程新分配页）
+            void *dst_kvaddr = page2kva(npage);  
+
+            // 将父进程页的整页内容复制到子进程新页
+            memcpy(dst_kvaddr, src_kvaddr, PGSIZE); 
+
+            // 在子进程页表中建立 start -> npage 的映射，使用与父页相同的权限
+            ret = page_insert(to, npage, start, perm); 
+
+            // 如果建映射失败
+            if (ret != 0)                              
+            {
+                // 回收分配的目标页，避免内存泄漏
+                free_page(npage);  
+                 // 返回错误码                    
+                return ret;                           
+            }
+
             assert(ret == 0);
         }
         start += PGSIZE;
