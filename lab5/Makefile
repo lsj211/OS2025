@@ -246,7 +246,7 @@ RUN_PREFIX	:= _binary_$(OBJDIR)_$(USER_PREFIX)
 MAKEOPTS	:= --quiet --no-print-directory
 
 run-%: build-%
-	$(V)$(SPIKE) $(UCOREIMG)
+	$(V)$(QEMU) -machine virt -nographic -bios default -device loader,file=$(UCOREIMG),addr=0x80200000
 
 run-nox-%: build-%
 	$(V)$(QEMU) -serial mon:stdio $(QEMUOPTS) -nographic

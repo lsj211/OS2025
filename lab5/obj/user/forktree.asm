@@ -5,13 +5,7 @@ obj/__user_forktree.out:     file format elf64-littleriscv
 Disassembly of section .text:
 
 0000000000800020 <_start>:
-.text
-.globl _start
-_start:
-    # call user-program function
-    call umain
   800020:	0c2000ef          	jal	8000e2 <umain>
-1:  j 1b
   800024:	a001                	j	800024 <_start+0x4>
 
 0000000000800026 <cputch>:

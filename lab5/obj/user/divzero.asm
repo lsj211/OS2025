@@ -5,13 +5,7 @@ obj/__user_divzero.out:     file format elf64-littleriscv
 Disassembly of section .text:
 
 0000000000800020 <_start>:
-.text
-.globl _start
-_start:
-    # call user-program function
-    call umain
   800020:	112000ef          	jal	800132 <umain>
-1:  j 1b
   800024:	a001                	j	800024 <_start+0x4>
 
 0000000000800026 <__panic>:
