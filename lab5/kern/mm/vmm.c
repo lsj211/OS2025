@@ -37,6 +37,55 @@
 static void check_vmm(void);
 static void check_vma_struct(void);
 
+
+
+// do_pgfault - handle a page fault at @addr. Currently only allocates a
+// zero-filled page for valid user VMA; otherwise returns error for caller to
+// kill the process.
+int do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr)
+{
+    int ret = -E_INVAL;
+    if (mm == NULL)
+    {
+        return ret;
+    }
+
+    uintptr_t la = ROUNDDOWN(addr, PGSIZE);
+    struct vma_struct *vma = find_vma(mm, la);
+    if (vma == NULL || la < vma->vm_start)
+    {
+        return ret;
+    }
+
+    uint32_t perm = PTE_U | PTE_V;
+    if (vma->vm_flags & VM_READ)
+        perm |= PTE_R;
+    if (vma->vm_flags & VM_WRITE)
+        perm |= (PTE_W | PTE_R);
+    if (vma->vm_flags & VM_EXEC)
+        perm |= PTE_X;
+
+    pte_t *ptep = get_pte(mm->pgdir, la, 1);
+    if (ptep == NULL)
+    {
+        return -E_NO_MEM;
+    }
+    if (*ptep & PTE_V)
+    {
+        return 0;
+    }
+
+    struct Page *page = alloc_page();
+    if (page == NULL)
+    {
+        return -E_NO_MEM;
+    }
+    memset(page2kva(page), 0, PGSIZE);
+    return page_insert(mm->pgdir, page, la, perm);
+}
+
+
+
 // mm_create -  alloc a mm_struct & initialize it.
 struct mm_struct *
 mm_create(void)

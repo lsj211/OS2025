@@ -110,6 +110,9 @@ USRCDIR		+= user
 ULIBDIR		+= user/libs
 
 UCFLAGS		+= $(addprefix -I,$(UINCLUDE))
+# Use no optimization for user programs to keep arithmetic (e.g. divide-by-zero)
+# behavior aligned with hardware expectations.
+# UCFLAGS		+= -O0
 USER_BINS	:=
 
 $(call add_files_cc,$(call listf_cc,$(ULIBDIR)),ulibs,$(UCFLAGS))

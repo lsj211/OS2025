@@ -112,7 +112,7 @@ alloc_proc(void)
          *       uint32_t wait_state;                        // waiting state
          *       struct proc_struct *cptr, *yptr, *optr;     // relations between processes
          */
-         proc->state = PROC_UNINIT;
+        proc->state = PROC_UNINIT;
         
         // 初始化进程ID为无效值
         proc->pid = -1;
@@ -140,6 +140,10 @@ alloc_proc(void)
         
         // 初始化进程名称为空字符串
         memset(proc->name, 0, PROC_NAME_LEN + 1);
+
+        proc->exit_code = 0;
+        proc->wait_state = 0;
+        proc->cptr = proc->yptr = proc->optr = NULL;
     }
     return proc;
 }
@@ -253,7 +257,7 @@ void proc_run(struct proc_struct *proc)
          *   lsatp():                   Modify the value of satp register
          *   switch_to():              Context switching between two processes
          */
-                 bool intr_flag;
+        bool intr_flag;
         struct proc_struct *prev = current;
 
         local_intr_save(intr_flag);
@@ -262,8 +266,8 @@ void proc_run(struct proc_struct *proc)
         current = proc;
 
         /* load new page table (satp) so that after switch the new address space is active */
-        lsatp((unsigned int)proc->pgdir);
-
+        // lsatp((unsigned int)proc->pgdir);
+        lsatp(proc->pgdir);
         /* perform architecture-specific context switch: will return when 'prev' is rescheduled */
         switch_to(&prev->context, &proc->context);
 
@@ -486,9 +490,7 @@ int do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf)
      *    update step 1: set child proc's parent to current process, make sure current process's wait_state is 0
      *    update step 5: insert proc_struct into hash_list && proc_list, set the relation links of process
      */
-
-
-             // 1. 分配进程控制块
+    // 1. 分配进程控制块
     if ((proc = alloc_proc()) == NULL) {
         goto fork_out;
     }
@@ -509,23 +511,22 @@ int do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf)
     // 5. 分配唯一pid
     proc->pid = get_pid();
 
-    // 6. 设置父进程
+    // 6. 设置父进程并清空等待/亲缘关系
+    current->wait_state = 0;
     proc->parent = current;
+    proc->wait_state = 0;
+    proc->cptr = proc->yptr = proc->optr = NULL;
 
     // 7. 插入进程哈希表和进程链表
     hash_proc(proc);
-    list_add(&proc_list, &(proc->list_link));
+    set_links(proc);
 
-    // 8. 增加进程数
-    nr_process++;
-
-    // 9. 唤醒新进程
-    extern void wakeup_proc(struct proc_struct *proc);
+    // 8. 唤醒新进程
     wakeup_proc(proc);
 
-    // 10. 返回新进程pid
+    // 9. 返回新进程pid
     ret = proc->pid;
-    
+
 fork_out:
     return ret;
 
@@ -760,6 +761,7 @@ load_icode(unsigned char *binary, size_t size)
      *          tf->status should be appropriate for user program (the value of sstatus)
      *          hint: check meaning of SPP, SPIE in SSTATUS, use them by SSTATUS_SPP, SSTATUS_SPIE(defined in risv.h)
      */
+
     // 用户栈顶
     tf->gpr.sp = USTACKTOP;
     // 用户程序的入口地址
