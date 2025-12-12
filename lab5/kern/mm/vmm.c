@@ -72,6 +72,26 @@ int do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr)
     }
     if (*ptep & PTE_V)
     {
+        if ((*ptep & PTE_COW) && (error_code == CAUSE_STORE_PAGE_FAULT))
+        {
+            struct Page *old = pte2page(*ptep);
+            struct Page *newp = alloc_page();
+            if (newp == NULL)
+            {
+                return -E_NO_MEM;
+            }
+            memcpy(page2kva(newp), page2kva(old), PGSIZE);
+
+            // 新页可写，去掉 COW 标记
+            uint32_t newperm = (perm | PTE_W) & ~PTE_COW;
+            int ret = page_insert(mm->pgdir, newp, la, newperm);
+            if (ret != 0)
+            {
+                free_page(newp);
+                return ret;
+            }
+            return 0;
+        }
         return 0;
     }
 
