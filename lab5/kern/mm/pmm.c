@@ -419,6 +419,30 @@ int copy_range(pde_t *to, pde_t *from, uintptr_t start, uintptr_t end,
              * (3) memory copy from src_kvaddr to dst_kvaddr, size is PGSIZE
              * (4) build the map of phy addr of  nage with the linear addr start
              */
+
+
+            // // 为子进程分配一页新的物理页
+            // struct Page *npage = alloc_page();
+            // if (npage == NULL) {
+            //     return -E_NO_MEM;          // 分配失败则返回内存不足
+            // }
+
+            // // 取得源页和新页对应的内核虚拟地址（用于内核态直接访问）
+            // void *src_kvaddr = page2kva(page);   // 父进程源物理页的内核虚拟地址
+            // void *dst_kvaddr = page2kva(npage);  // 子进程新物理页的内核虚拟地址
+
+            // // 按页大小（PGSIZE）拷贝父页内容到子页
+            // memcpy(dst_kvaddr, src_kvaddr, PGSIZE);
+
+            // // 将新物理页按父页相同的用户权限映射到子进程的虚拟地址 start
+            // ret = page_insert(to, npage, start, perm);
+            // if (ret != 0) {
+            //     free_page(npage);          // 映射失败要回收刚分配的页，避免泄漏
+            //     return ret;
+            // }
+
+
+            
             if (perm & PTE_W)
             {
                 // COW
