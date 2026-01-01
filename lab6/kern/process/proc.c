@@ -123,38 +123,30 @@ alloc_proc(void)
          *       uint32_t lab6_stride;                       // stride value (lab6 stride)
          *       uint32_t lab6_priority;                     // priority value (lab6 stride)
          */
-         proc->state = PROC_UNINIT;
-        
-        // 初始化进程ID为无效值
+        proc->state = PROC_UNINIT;
         proc->pid = -1;
-        
-        // 初始化运行次数为0
         proc->runs = 0;
         proc->kstack = 0;
         proc->need_resched = 0;
         proc->parent = NULL;
-        
-        // 初始化内存管理结构为NULL
         proc->mm = NULL;
-        
-        // 初始化上下文结构（全部置0）
         memset(&(proc->context), 0, sizeof(struct context));
-        
-        // 初始化陷阱帧指针为NULL
         proc->tf = NULL;
-        
-        // 初始化页目录表基址
         proc->pgdir = boot_pgdir_pa;
-        
-        // 初始化进程标志为0
         proc->flags = 0;
-        
-        // 初始化进程名称为空字符串
         memset(proc->name, 0, PROC_NAME_LEN + 1);
 
         proc->exit_code = 0;
         proc->wait_state = 0;
         proc->cptr = proc->yptr = proc->optr = NULL;
+
+        // 初始化调度相关字段
+        proc->rq = NULL;
+        list_init(&(proc->run_link));
+        proc->time_slice = 0;
+        skew_heap_init(&(proc->lab6_run_pool));
+        proc->lab6_stride = 0;
+        proc->lab6_priority = 1;
     }
     return proc;
 }
@@ -500,41 +492,37 @@ int do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf)
      *    update step 1: set child proc's parent to current process, make sure current process's wait_state is 0
      *    update step 5: insert proc_struct into hash_list && proc_list, set the relation links of process
      */
-      // 1. 分配进程控制块
+    // 1. allocate proc_struct
     if ((proc = alloc_proc()) == NULL) {
         goto fork_out;
     }
 
-    // 2. 分配内核栈
+    proc->parent = current;
+    current->wait_state = 0;
+
+    // 2. allocate kernel stack
     if (setup_kstack(proc) != 0) {
         goto bad_fork_cleanup_proc;
     }
 
-    // 3. 复制/共享内存管理信息（内核线程不需要实际操作，copy_mm会直接返回0）
+    // 3. copy or share memory space
     if (copy_mm(clone_flags, proc) != 0) {
         goto bad_fork_cleanup_kstack;
     }
 
-    // 4. 复制上下文（trapframe、context）
+    // 4. setup trapframe/context
     copy_thread(proc, stack, tf);
 
-    // 5. 分配唯一pid
+    // 5. assign pid and insert into lists
     proc->pid = get_pid();
-
-    // 6. 设置父进程并清空等待/亲缘关系
-    current->wait_state = 0;
-    proc->parent = current;
     proc->wait_state = 0;
-    proc->cptr = proc->yptr = proc->optr = NULL;
-
-    // 7. 插入进程哈希表和进程链表
     hash_proc(proc);
     set_links(proc);
 
-    // 8. 唤醒新进程
+    // 6. make runnable
     wakeup_proc(proc);
 
-    // 9. 返回新进程pid
+    // 7. return child pid
     ret = proc->pid;
 
 fork_out:
