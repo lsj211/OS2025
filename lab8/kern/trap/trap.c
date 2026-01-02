@@ -203,7 +203,7 @@ void exception_handler(struct trapframe *tf)
         cprintf("Load page fault\n");
         break;
     case CAUSE_STORE_PAGE_FAULT:
-        cprintf("Store/AMO page fault\n");
+        // cprintf("Store/AMO page fault\n");
         pgfault:;
         if (current == NULL || current->mm == NULL)
         {

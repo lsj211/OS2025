@@ -63,6 +63,7 @@ main(void) {
 
     cprintf("fork ok.\n");
 
+
     for (i = 0; i < total; i ++) {
         if (wait() != 0) {
             cprintf("wait failed.\n");

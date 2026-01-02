@@ -155,6 +155,7 @@ alloc_proc(void)
 
         proc->filesp = NULL;
         
+
     }
     return proc;
 }
@@ -675,6 +676,7 @@ int do_exit(int error_code)
         }
     }
     local_intr_restore(intr_flag);
+    // cprintf("schedule called \n");
     schedule();
     panic("do_exit will not return!! %d.\n", current->pid);
 }
