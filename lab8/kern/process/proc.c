@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include <fs.h>
 #include <vfs.h>
+#include <file.h>
 #include <sysfile.h>
 /* ------------- process/thread mechanism design&implementation -------------
 (an simplified Linux process/thread mechanism )
@@ -686,13 +687,18 @@ static int
 load_icode_read(int fd, void *buf, size_t len, off_t offset)
 {
     int ret;
-    if ((ret = sysfile_seek(fd, offset, LSEEK_SET)) != 0)
+    size_t copied = 0;
+    if ((ret = file_seek(fd, offset, LSEEK_SET)) != 0)
     {
         return ret;
     }
-    if ((ret = sysfile_read(fd, buf, len)) != len)
+    if ((ret = file_read(fd, buf, len, &copied)) != 0)
     {
-        return (ret < 0) ? ret : -1;
+        return ret;
+    }
+    if (copied != len)
+    {
+        return -E_INVAL;
     }
     return 0;
 }
@@ -978,6 +984,39 @@ failed_cleanup:
     return ret;
 }
 
+static int
+copy_kargv_kernel(int argc, char **kargv, const char **argv)
+{
+    int i, ret = -E_INVAL;
+    for (i = 0; i < argc; i++)
+    {
+        if (argv[i] == NULL)
+        {
+            goto failed_cleanup;
+        }
+        size_t len = strnlen(argv[i], EXEC_MAX_ARG_LEN + 1);
+        if (len > EXEC_MAX_ARG_LEN)
+        {
+            ret = -E_TOO_BIG;
+            goto failed_cleanup;
+        }
+        char *buffer;
+        if ((buffer = kmalloc(len + 1)) == NULL)
+        {
+            ret = -E_NO_MEM;
+            goto failed_cleanup;
+        }
+        memcpy(buffer, argv[i], len);
+        buffer[len] = '\0';
+        kargv[i] = buffer;
+    }
+    return 0;
+
+failed_cleanup:
+    put_kargv(i, kargv);
+    return ret;
+}
+
 // do_execve - call exit_mmap(mm)&put_pgdir(mm) to reclaim memory space of current process
 //           - call load_icode to setup new memory space accroding binary prog.
 int do_execve(const char *name, int argc, const char **argv)
@@ -997,33 +1036,62 @@ int do_execve(const char *name, int argc, const char **argv)
 
     int ret = -E_INVAL;
 
-    lock_mm(mm);
-    if (name == NULL)
+    if (mm != NULL)
     {
-        snprintf(local_name, sizeof(local_name), "<null> %d", current->pid);
-    }
-    else
-    {
-        if (!copy_string(mm, local_name, name, sizeof(local_name)))
+        lock_mm(mm);
+        if (name == NULL)
+        {
+            snprintf(local_name, sizeof(local_name), "<null> %d", current->pid);
+        }
+        else
+        {
+            if (!copy_string(mm, local_name, name, sizeof(local_name)))
+            {
+                unlock_mm(mm);
+                return ret;
+            }
+        }
+        if ((ret = copy_kargv(mm, argc, kargv, argv)) != 0)
         {
             unlock_mm(mm);
             return ret;
         }
-    }
-    if ((ret = copy_kargv(mm, argc, kargv, argv)) != 0)
-    {
+        path = argv[0];
         unlock_mm(mm);
-        return ret;
     }
-    path = argv[0];
-    unlock_mm(mm);
+    else
+    {
+        if (name == NULL)
+        {
+            snprintf(local_name, sizeof(local_name), "<null> %d", current->pid);
+        }
+        else
+        {
+            snprintf(local_name, sizeof(local_name), "%s", name);
+        }
+        if ((ret = copy_kargv_kernel(argc, kargv, argv)) != 0)
+        {
+            return ret;
+        }
+        path = argv[0];
+    }
     files_closeall(current->filesp);
 
-    /* sysfile_open will check the first argument path, thus we have to use a user-space pointer, and argv[0] may be incorrect */
     int fd;
-    if ((ret = fd = sysfile_open(path, O_RDONLY)) < 0)
+    if (mm != NULL)
     {
-        goto execve_exit;
+        /* sysfile_open will check the first argument path, thus we have to use a user-space pointer, and argv[0] may be incorrect */
+        if ((ret = fd = sysfile_open(path, O_RDONLY)) < 0)
+        {
+            goto execve_exit;
+        }
+    }
+    else
+    {
+        if ((ret = fd = file_open((char *)path, O_RDONLY)) < 0)
+        {
+            goto execve_exit;
+        }
     }
     if (mm != NULL)
     {
@@ -1037,11 +1105,12 @@ int do_execve(const char *name, int argc, const char **argv)
         current->mm = NULL;
     }
     ret = -E_NO_MEM;
-    ;
     if ((ret = load_icode(fd, argc, kargv)) != 0)
     {
+        file_close(fd);
         goto execve_exit;
     }
+    file_close(fd);
     put_kargv(argc, kargv);
     set_proc_name(current, local_name);
     return 0;
